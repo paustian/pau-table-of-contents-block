@@ -7,21 +7,29 @@ return array(
 		'name' => 'create-block/pau-table-of-contents-block',
 		'version' => '0.1.0',
 		'title' => 'Table of Contents',
-		'category' => 'widgets',
+		'category' => 'design',
 		'icon' => 'list-view',
-		'description' => 'List a table of contents by picking a top-level category.',
+		'description' => 'Generates a Table of Contents based on a root category (book) and its subcategories (chapters)',
 		'attributes' => array(
-			'content' => array(
-				'type' => 'string',
-				'source' => 'html',
-				'selector' => 'p'
-			),
 			'alignment' => array(
 				'type' => 'string',
 				'default' => 'none'
 			),
 			'category' => array(
-				'type' => 'boolean'
+				'type' => 'string',
+				'default' => ''
+			),
+			'postOrder' => array(
+				'type' => 'object',
+				'default' => array(
+					
+				)
+			),
+			'chapterOrder' => array(
+				'type' => 'array',
+				'default' => array(
+					
+				)
 			)
 		),
 		'example' => array(
@@ -41,6 +49,6 @@ return array(
 		'editorScript' => 'file:./index.js',
 		'editorStyle' => 'file:./index.css',
 		'style' => 'file:./style-index.css',
-		'viewScript' => 'file:./view.js'
+		'render' => 'file:./render.php'
 	)
 );

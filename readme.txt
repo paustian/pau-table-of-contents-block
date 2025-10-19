@@ -1,12 +1,14 @@
 === Pau Table Of Contents Block ===
-Contributors:      The WordPress Contributors
+Contributors:      Timothy Paustian
 Tags:              block
 Tested up to:      6.7
 Stable tag:        0.1.0
 License:           GPL-2.0-or-later
 License URI:       https://www.gnu.org/licenses/gpl-2.0.html
 
-Example block scaffolded with Create Block tool.
+This plugin creates a table of contents, as for a book. It uses a root category, with the subcategories of the root
+category being chapters. It then collects all this information and makes a table contents. The order of the pages or
+posts can be changed by the edtior.
 
 == Description ==
 

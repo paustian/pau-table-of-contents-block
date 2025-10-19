@@ -1,7 +1,7 @@
 <?php
 /**
- * Plugin Name:       Pau Table Of Contents Block
- * Description:       Example block scaffolded with Create Block tool.
+ * Plugin Name:       Table of Contents
+ * Description:       A Gutenberg block that can organize posts or pages into a table of contents as for a book.
  * Version:           0.1.0
  * Requires at least: 6.7
  * Requires PHP:      7.4
