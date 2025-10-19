@@ -1,0 +1,20 @@
+{
+	"name": "pau-table-of-contents-block",
+	"version": "0.1.0",
+	"description": "A block for displaying the table of contents of a collection of posts or pages that constitute a body of work -- a book. You can edit the order of appearance of articles and this is also used to add next/previous links during presentation of those pages/posts",
+	"author": "Timothy Paustian",
+	"license": "GPL-2.0-or-later",
+	"main": "build/index.js",
+	"scripts": {
+		"build": "wp-scripts build --blocks-manifest",
+		"format": "wp-scripts format",
+		"lint:css": "wp-scripts lint-style",
+		"lint:js": "wp-scripts lint-js",
+		"packages-update": "wp-scripts packages-update",
+		"plugin-zip": "wp-scripts plugin-zip",
+		"start": "wp-scripts start --blocks-manifest"
+	},
+	"devDependencies": {
+		"@wordpress/scripts": "^30.25.0"
+	}
+}
