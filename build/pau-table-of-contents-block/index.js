@@ -8,7 +8,7 @@
   \****************************************************/
 /***/ ((module) => {
 
-module.exports = /*#__PURE__*/JSON.parse('{"$schema":"https://schemas.wp.org/trunk/block.json","apiVersion":3,"name":"create-block/pau-table-of-contents-block","version":"0.1.0","title":"Table of Contents","category":"design","icon":"list-view","description":"Generates a Table of Contents based on a root category (book) and its subcategories (chapters)","attributes":{"alignment":{"type":"string","default":"none"},"category":{"type":"string","default":""},"postOrder":{"type":"object","default":{}},"chapterOrder":{"type":"array","default":[]}},"example":{},"supports":{"color":{"background":true,"text":true},"html":false,"typography":{"fontSize":true}},"textdomain":"pau-table-of-contents-block","editorScript":"file:./index.js","editorStyle":"file:./index.css","style":"file:./style-index.css","render":"file:./render.php"}');
+module.exports = /*#__PURE__*/JSON.parse('{"$schema":"https://schemas.wp.org/trunk/block.json","apiVersion":3,"name":"create-block/pau-table-of-contents-block","version":"0.5.0","title":"Table of Contents","category":"design","icon":"list-view","description":"Generates a Table of Contents based on a root category (book) and its subcategories (chapters)","attributes":{"alignment":{"type":"string","default":"none"},"category":{"type":"string","default":""},"postOrder":{"type":"object","default":{}},"chapterOrder":{"type":"array","default":[]}},"example":{},"supports":{"color":{"background":true,"text":true},"html":false,"typography":{"fontSize":true}},"textdomain":"pau-table-of-contents-block","editorScript":"file:./index.js","editorStyle":"file:./index.css","style":"file:./style-index.css","render":"file:./render.php"}');
 
 /***/ }),
 
@@ -36,8 +36,8 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! react/jsx-runtime */ "react/jsx-runtime");
 /* harmony import */ var react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6___default = /*#__PURE__*/__webpack_require__.n(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__);
 /**
- * Retrieves the required components from the WordPress packages.
- */
+* Retrieves the required components from the WordPress packages.
+*/
 
 /**
  * React hook that is used to mark the block wrapper element.
@@ -79,7 +79,7 @@ function Edit({
   attributes: attr,
   setAttributes
 }) {
-  // UPDATED: Destructuring to include new chapterOrder attribute
+  // Destructuring to include all necessary attributes
   const {
     category,
     postOrder,
@@ -91,18 +91,30 @@ function Edit({
   const [childCategories, setChildCategories] = (0,_wordpress_element__WEBPACK_IMPORTED_MODULE_3__.useState)([]); // Child categories of the selected root (Chapters)
   const [postsByChapter, setPostsByChapter] = (0,_wordpress_element__WEBPACK_IMPORTED_MODULE_3__.useState)({}); // Posts associated with each chapter ID
   const [isLoading, setIsLoading] = (0,_wordpress_element__WEBPACK_IMPORTED_MODULE_3__.useState)(false);
+
+  // NEW: Local state to track which chapters are open/closed in the editor preview
+  const [openChapters, setOpenChapters] = (0,_wordpress_element__WEBPACK_IMPORTED_MODULE_3__.useState)({});
   const onChangeAlignment = newAlignment => {
     setAttributes({
       alignment: newAlignment === undefined ? 'none' : newAlignment
     });
   };
   const onChangeCategory = newCat => {
-    // Reset post and chapter order and clear data when root category changes
+    // Reset state and attributes when root category changes
     setAttributes({
       category: newCat === '' ? '' : newCat,
       postOrder: {},
-      chapterOrder: [] // NEW: Reset chapterOrder
+      chapterOrder: []
     });
+    setOpenChapters({}); // Reset accordion state
+  };
+
+  // NEW: Toggle function for the editor preview accordion
+  const handleToggleChapter = chapterIdStr => {
+    setOpenChapters(prevOpen => ({
+      ...prevOpen,
+      [chapterIdStr]: !prevOpen[chapterIdStr]
+    }));
   };
 
   // 1. Fetch Root Categories (Parent=0) for the initial dropdown
@@ -123,13 +135,19 @@ function Edit({
       }).then(data => {
         setChildCategories(data);
 
-        // NEW: Initialize chapterOrder attribute
+        // Initialize chapterOrder attribute
         const fetchedChapterIds = data.map(chapter => chapter.id);
         if (chapterOrder.length === 0 || chapterOrder.some(id => !fetchedChapterIds.includes(id))) {
           // Initialize or sanitize chapterOrder if it's empty or contains invalid IDs
-          setAttributes({
-            chapterOrder: fetchedChapterIds
-          });
+          // NOTE: We only update chapterOrder here if a change is needed to avoid unnecessary attribute saves.
+          const existingOrder = chapterOrder.filter(id => fetchedChapterIds.includes(id));
+          const missingIds = fetchedChapterIds.filter(id => !existingOrder.includes(id));
+          const finalOrder = [...existingOrder, ...missingIds];
+          if (JSON.stringify(chapterOrder) !== JSON.stringify(finalOrder)) {
+            setAttributes({
+              chapterOrder: finalOrder
+            });
+          }
         }
       }).catch(error => {
         console.error(`Error fetching child categories for parent ${parentId}:`, error);
@@ -155,7 +173,6 @@ function Edit({
     setIsLoading(true);
     const fetchPromises = childCategories.map(chapter => {
       // Fetch posts associated with this chapter category ID
-      // Use 'include' filter on post status to ensure public posts are fetched
       return _wordpress_api_fetch__WEBPACK_IMPORTED_MODULE_4___default()({
         path: `/wp/v2/posts?categories=${chapter.id}&per_page=100&orderby=date&order=asc&_fields=id,title,link&status=publish,future`
       }).then(posts => ({
@@ -178,28 +195,25 @@ function Edit({
 
         // Get a list of IDs of posts currently found by the API
         const fetchedPostIds = posts.map(post => post.id);
-        if (!newPostOrder[chapterIdStr] || newPostOrder[chapterIdStr].length === 0) {
-          // Case 1: Initialize order using the API's default sort (date)
-          newPostOrder[chapterIdStr] = fetchedPostIds;
+
+        // --- Sanitization and Initialization ---
+        // We use the existing postOrder to sanitize it, but we MUST compare before saving.
+        const existingOrder = newPostOrder[chapterIdStr] || [];
+
+        // 1. Filter out deleted/unpublished posts from the saved order
+        const filteredOrder = existingOrder.filter(id => fetchedPostIds.includes(id));
+
+        // 2. Add new posts (found by API but not in filtered order) to the end
+        const missingPosts = fetchedPostIds.filter(id => !filteredOrder.includes(id));
+        const finalOrder = [...filteredOrder, ...missingPosts];
+        if (JSON.stringify(existingOrder) !== JSON.stringify(finalOrder)) {
+          newPostOrder[chapterIdStr] = finalOrder;
           postOrderChanged = true;
-        } else {
-          // Case 2: Sanitize and update existing custom order
-
-          // 1. Filter out deleted/unpublished posts from the saved order
-          const existingOrder = newPostOrder[chapterIdStr].filter(id => fetchedPostIds.includes(id));
-
-          // 2. Add new posts (found by API but not in saved order) to the end
-          const missingPosts = fetchedPostIds.filter(id => !existingOrder.includes(id));
-          const finalOrder = [...existingOrder, ...missingPosts];
-          if (JSON.stringify(newPostOrder[chapterIdStr]) !== JSON.stringify(finalOrder)) {
-            newPostOrder[chapterIdStr] = finalOrder;
-            postOrderChanged = true;
-          }
         }
       });
       setPostsByChapter(newPostsByChapter);
 
-      // Update postOrder attribute only if a change was detected
+      // Update postOrder attribute only if a change was detected during sanitization
       if (postOrderChanged) {
         setAttributes({
           postOrder: newPostOrder
@@ -211,7 +225,11 @@ function Edit({
       setIsLoading(false);
       setPostsByChapter({});
     });
-  }, [childCategories, postOrder]); // Added postOrder dependency to re-run sanitization if a user changes it
+
+    // FIX: Removed 'postOrder' from dependencies. This hook should only run when chapters change.
+    // Changes to postOrder itself are handled by handleMovePost and should not trigger a re-fetch/re-sanitization
+    // unless 'childCategories' has changed.
+  }, [childCategories]);
 
   // 4. Article Reordering Handler
   const handleMovePost = (chapterIdStr, postId, direction) => {
@@ -236,7 +254,7 @@ function Edit({
     }
   };
 
-  // NEW: 5. Chapter Reordering Handler
+  // 5. Chapter Reordering Handler
   const handleMoveChapter = (chapterId, direction) => {
     const currentIndex = chapterOrder.indexOf(chapterId);
     let newIndex = currentIndex + (direction === 'up' ? -1 : 1);
@@ -320,93 +338,105 @@ function Edit({
       style: {
         textAlign: attr.alignment
       },
-      children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)("h2", {
-        className: "text-xl font-bold mb-4",
-        children: category ? getChapterName(category) : 'Table of Contents Preview (Select Root Category)'
-      }), isLoading && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsxs)("div", {
+      children: [isLoading && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsxs)("div", {
         className: "flex items-center space-x-2 p-3 bg-indigo-100 text-indigo-800 rounded",
         children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)(_wordpress_components__WEBPACK_IMPORTED_MODULE_2__.Spinner, {}), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)("p", {
           children: "Loading chapters and articles..."
         })]
-      }), !isLoading && category && orderedChapters.length > 0 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)("ol", {
-        className: "list-decimal list-inside space-y-4 pl-0 ml-4",
-        children: orderedChapters.map((chapter, chapterIndex) => {
-          const chapterIdStr = String(chapter.id);
-          // Use the custom post order from attributes, falling back to an empty array
-          const orderedPostIds = postOrder[chapterIdStr] || [];
-          const isFirstChapter = chapterIndex === 0;
-          const isLastChapter = chapterIndex === orderedChapters.length - 1;
-          return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsxs)("li", {
-            className: "font-semibold text-gray-700 p-2 border border-blue-100 bg-blue-50 rounded",
-            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsxs)("div", {
-              className: "flex items-center justify-between",
-              children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)("span", {
-                children: getChapterName(chapter.id)
-              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsxs)("div", {
-                className: "flex space-x-1",
-                children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)(_wordpress_components__WEBPACK_IMPORTED_MODULE_2__.Button, {
-                  icon: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)(_wordpress_components__WEBPACK_IMPORTED_MODULE_2__.Dashicon, {
-                    icon: "arrow-up-alt2"
-                  }),
-                  label: (0,_wordpress_i18n__WEBPACK_IMPORTED_MODULE_0__.__)('Move Chapter Up', 'toc-block'),
-                  onClick: () => handleMoveChapter(chapter.id, 'up'),
-                  disabled: isFirstChapter,
-                  isSmall: true
-                }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)(_wordpress_components__WEBPACK_IMPORTED_MODULE_2__.Button, {
-                  icon: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)(_wordpress_components__WEBPACK_IMPORTED_MODULE_2__.Dashicon, {
-                    icon: "arrow-down-alt2"
-                  }),
-                  label: (0,_wordpress_i18n__WEBPACK_IMPORTED_MODULE_0__.__)('Move Chapter Down', 'toc-block'),
-                  onClick: () => handleMoveChapter(chapter.id, 'down'),
-                  disabled: isLastChapter,
-                  isSmall: true
-                })]
-              })]
-            }), orderedPostIds.length > 0 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)("ul", {
-              className: "list-none space-y-1 mt-2 border-l-2 border-gray-200 pl-4 pt-1",
-              children: orderedPostIds.map((postId, index) => /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsxs)("li", {
-                className: "flex items-center justify-between p-2 bg-white border border-gray-100 rounded text-sm font-normal shadow-sm",
-                children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)("span", {
-                  className: "text-gray-600 flex-grow pr-2",
-                  children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)("a", {
-                    href: getPostLink(chapterIdStr, postId),
-                    onClick: e => e.preventDefault(),
-                    children: getPostTitle(chapterIdStr, postId)
-                  })
+      }), !isLoading && category && orderedChapters.length > 0 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)("div", {
+        className: "wp-block-pau-table-of-contents-block-list",
+        children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)("ul", {
+          children: orderedChapters.map((chapter, chapterIndex) => {
+            const chapterIdStr = String(chapter.id);
+            // Use the custom post order from attributes, falling back to an empty array
+            const orderedPostIds = postOrder[chapterIdStr] || [];
+            const isFirstChapter = chapterIndex === 0;
+            const isLastChapter = chapterIndex === orderedChapters.length - 1;
+
+            // NEW: Check if this chapter is currently open in the editor preview
+            const isChapterOpen = openChapters[chapterIdStr] || false;
+            return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsxs)("li", {
+              children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsxs)("div", {
+                className: "flex items-center justify-between",
+                children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsxs)(_wordpress_components__WEBPACK_IMPORTED_MODULE_2__.Button, {
+                  className: "chapter-toggle-button" // Add class for styling/targeting
+                  ,
+                  onClick: () => handleToggleChapter(chapterIdStr),
+                  isTertiary: true,
+                  "aria-expanded": isChapterOpen,
+                  style: {
+                    padding: 0,
+                    margin: 0
+                  },
+                  children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)(_wordpress_components__WEBPACK_IMPORTED_MODULE_2__.Dashicon, {
+                    icon: isChapterOpen ? "arrow-down" : "arrow-right",
+                    style: {
+                      marginRight: 8
+                    }
+                  }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)("span", {
+                    children: getChapterName(chapter.id)
+                  })]
                 }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsxs)("div", {
                   className: "flex space-x-1",
                   children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)(_wordpress_components__WEBPACK_IMPORTED_MODULE_2__.Button, {
                     icon: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)(_wordpress_components__WEBPACK_IMPORTED_MODULE_2__.Dashicon, {
                       icon: "arrow-up-alt2"
                     }),
-                    label: (0,_wordpress_i18n__WEBPACK_IMPORTED_MODULE_0__.__)('Move Article Up', 'toc-block'),
-                    onClick: () => handleMovePost(chapterIdStr, postId, 'up'),
-                    disabled: index === 0,
+                    label: (0,_wordpress_i18n__WEBPACK_IMPORTED_MODULE_0__.__)('Move Chapter Up', 'toc-block'),
+                    onClick: () => handleMoveChapter(chapter.id, 'up'),
+                    disabled: isFirstChapter,
                     isSmall: true
                   }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)(_wordpress_components__WEBPACK_IMPORTED_MODULE_2__.Button, {
                     icon: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)(_wordpress_components__WEBPACK_IMPORTED_MODULE_2__.Dashicon, {
                       icon: "arrow-down-alt2"
                     }),
-                    label: (0,_wordpress_i18n__WEBPACK_IMPORTED_MODULE_0__.__)('Move Article Down', 'toc-block'),
-                    onClick: () => handleMovePost(chapterIdStr, postId, 'down'),
-                    disabled: index === orderedPostIds.length - 1,
+                    label: (0,_wordpress_i18n__WEBPACK_IMPORTED_MODULE_0__.__)('Move Chapter Down', 'toc-block'),
+                    onClick: () => handleMoveChapter(chapter.id, 'down'),
+                    disabled: isLastChapter,
                     isSmall: true
                   })]
                 })]
-              }, postId))
-            }), orderedPostIds.length === 0 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)("p", {
-              className: "text-xs text-gray-500 mt-1 pl-4",
-              children: "(No articles found in this chapter.)"
-            })]
-          }, chapter.id);
+              }), isChapterOpen && orderedPostIds.length > 0 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)("ul", {
+                children: orderedPostIds.map((postId, index) => /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsxs)("li", {
+                  children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)("span", {
+                    className: "text-gray-600 flex-grow pr-2 text-sm",
+                    children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)("a", {
+                      href: getPostLink(chapterIdStr, postId),
+                      onClick: e => e.preventDefault(),
+                      children: getPostTitle(chapterIdStr, postId)
+                    })
+                  }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsxs)("div", {
+                    className: "flex space-x-1",
+                    children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)(_wordpress_components__WEBPACK_IMPORTED_MODULE_2__.Button, {
+                      icon: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)(_wordpress_components__WEBPACK_IMPORTED_MODULE_2__.Dashicon, {
+                        icon: "arrow-up-alt2"
+                      }),
+                      label: (0,_wordpress_i18n__WEBPACK_IMPORTED_MODULE_0__.__)('Move Article Up', 'toc-block'),
+                      onClick: () => handleMovePost(chapterIdStr, postId, 'up'),
+                      disabled: index === 0,
+                      isSmall: true
+                    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)(_wordpress_components__WEBPACK_IMPORTED_MODULE_2__.Button, {
+                      icon: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)(_wordpress_components__WEBPACK_IMPORTED_MODULE_2__.Dashicon, {
+                        icon: "arrow-down-alt2"
+                      }),
+                      label: (0,_wordpress_i18n__WEBPACK_IMPORTED_MODULE_0__.__)('Move Article Down', 'toc-block'),
+                      onClick: () => handleMovePost(chapterIdStr, postId, 'down'),
+                      disabled: index === orderedPostIds.length - 1,
+                      isSmall: true
+                    })]
+                  })]
+                }, postId))
+              }), isChapterOpen && orderedPostIds.length === 0 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)("p", {
+                className: "text-xs text-gray-500 mt-1 pl-4",
+                children: "(No articles found in this chapter.)"
+              })]
+            }, chapter.id);
+          })
         })
       }), !isLoading && category && orderedChapters.length === 0 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)("p", {
         className: "p-3 bg-yellow-100 text-yellow-800 rounded",
         children: "No chapters (child categories) found for this root category."
       })]
-    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)("p", {
-      className: "sr-only",
-      children: 'TOC Block: Content generated dynamically by PHP using selected category and post order.'
     })]
   });
 }

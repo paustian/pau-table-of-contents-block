@@ -1,6 +1,6 @@
 /**
- * Retrieves the required components from the WordPress packages.
- */
+* Retrieves the required components from the WordPress packages.
+*/
 import { __ } from '@wordpress/i18n';
 /**
  * React hook that is used to mark the block wrapper element.
@@ -43,7 +43,7 @@ const decodeHTMLEntities = (text) => {
  * @returns {JSX.Element} The editor interface.
  */
 export default function Edit( { className, attributes: attr, setAttributes } ) {
-	// UPDATED: Destructuring to include new chapterOrder attribute
+	// Destructuring to include all necessary attributes
 	const { category, postOrder, chapterOrder } = attr;
 
 	// State for data fetched from the WordPress REST API
@@ -52,6 +52,9 @@ export default function Edit( { className, attributes: attr, setAttributes } ) {
 	const [postsByChapter, setPostsByChapter] = useState({});   // Posts associated with each chapter ID
 	const [isLoading, setIsLoading] = useState(false);
 
+	// NEW: Local state to track which chapters are open/closed in the editor preview
+	const [openChapters, setOpenChapters] = useState({});
+
 	const onChangeAlignment = ( newAlignment ) => {
 		setAttributes( {
 			alignment: newAlignment === undefined ? 'none' : newAlignment,
@@ -59,12 +62,21 @@ export default function Edit( { className, attributes: attr, setAttributes } ) {
 	};
 
 	const onChangeCategory = ( newCat ) => {
-		// Reset post and chapter order and clear data when root category changes
+		// Reset state and attributes when root category changes
 		setAttributes( {
 			category: newCat === '' ? '' : newCat,
 			postOrder: {},
-			chapterOrder: [], // NEW: Reset chapterOrder
+			chapterOrder: [],
 		} );
+		setOpenChapters({}); // Reset accordion state
+	};
+
+	// NEW: Toggle function for the editor preview accordion
+	const handleToggleChapter = (chapterIdStr) => {
+		setOpenChapters(prevOpen => ({
+			...prevOpen,
+			[chapterIdStr]: !prevOpen[chapterIdStr]
+		}));
 	};
 
 	// 1. Fetch Root Categories (Parent=0) for the initial dropdown
@@ -86,14 +98,21 @@ export default function Edit( { className, attributes: attr, setAttributes } ) {
 				.then((data) => {
 					setChildCategories(data);
 
-					// NEW: Initialize chapterOrder attribute
+					// Initialize chapterOrder attribute
 					const fetchedChapterIds = data.map(chapter => chapter.id);
 
 					if (chapterOrder.length === 0 || chapterOrder.some(id => !fetchedChapterIds.includes(id))) {
 						// Initialize or sanitize chapterOrder if it's empty or contains invalid IDs
-						setAttributes({
-							chapterOrder: fetchedChapterIds
-						});
+						// NOTE: We only update chapterOrder here if a change is needed to avoid unnecessary attribute saves.
+						const existingOrder = chapterOrder.filter(id => fetchedChapterIds.includes(id));
+						const missingIds = fetchedChapterIds.filter(id => !existingOrder.includes(id));
+						const finalOrder = [...existingOrder, ...missingIds];
+
+						if (JSON.stringify(chapterOrder) !== JSON.stringify(finalOrder)) {
+							setAttributes({
+								chapterOrder: finalOrder
+							});
+						}
 					}
 				})
 				.catch((error) => {
@@ -108,6 +127,7 @@ export default function Edit( { className, attributes: attr, setAttributes } ) {
 		}
 	}, [category]); // Depend on category attribute
 
+
 	// 3. Fetch Posts for all Child Categories and initialize/sanitize Post Order
 	useEffect(() => {
 		if (childCategories.length === 0) {
@@ -120,7 +140,6 @@ export default function Edit( { className, attributes: attr, setAttributes } ) {
 		setIsLoading(true);
 		const fetchPromises = childCategories.map(chapter => {
 			// Fetch posts associated with this chapter category ID
-			// Use 'include' filter on post status to ensure public posts are fetched
 			return apiFetch({
 				path: `/wp/v2/posts?categories=${chapter.id}&per_page=100&orderby=date&order=asc&_fields=id,title,link&status=publish,future`
 			}).then(posts => ({ chapterId: chapter.id, posts }));
@@ -139,31 +158,27 @@ export default function Edit( { className, attributes: attr, setAttributes } ) {
 					// Get a list of IDs of posts currently found by the API
 					const fetchedPostIds = posts.map(post => post.id);
 
-					if (!newPostOrder[chapterIdStr] || newPostOrder[chapterIdStr].length === 0) {
-						// Case 1: Initialize order using the API's default sort (date)
-						newPostOrder[chapterIdStr] = fetchedPostIds;
+					// --- Sanitization and Initialization ---
+					// We use the existing postOrder to sanitize it, but we MUST compare before saving.
+					const existingOrder = newPostOrder[chapterIdStr] || [];
+
+					// 1. Filter out deleted/unpublished posts from the saved order
+					const filteredOrder = existingOrder.filter(id => fetchedPostIds.includes(id));
+
+					// 2. Add new posts (found by API but not in filtered order) to the end
+					const missingPosts = fetchedPostIds.filter(id => !filteredOrder.includes(id));
+
+					const finalOrder = [...filteredOrder, ...missingPosts];
+
+					if (JSON.stringify(existingOrder) !== JSON.stringify(finalOrder)) {
+						newPostOrder[chapterIdStr] = finalOrder;
 						postOrderChanged = true;
-					} else {
-						// Case 2: Sanitize and update existing custom order
-
-						// 1. Filter out deleted/unpublished posts from the saved order
-						const existingOrder = newPostOrder[chapterIdStr].filter(id => fetchedPostIds.includes(id));
-
-						// 2. Add new posts (found by API but not in saved order) to the end
-						const missingPosts = fetchedPostIds.filter(id => !existingOrder.includes(id));
-
-						const finalOrder = [...existingOrder, ...missingPosts];
-
-						if (JSON.stringify(newPostOrder[chapterIdStr]) !== JSON.stringify(finalOrder)) {
-							newPostOrder[chapterIdStr] = finalOrder;
-							postOrderChanged = true;
-						}
 					}
 				});
 
 				setPostsByChapter(newPostsByChapter);
 
-				// Update postOrder attribute only if a change was detected
+				// Update postOrder attribute only if a change was detected during sanitization
 				if (postOrderChanged) {
 					setAttributes({ postOrder: newPostOrder });
 				}
@@ -176,7 +191,11 @@ export default function Edit( { className, attributes: attr, setAttributes } ) {
 				setPostsByChapter({});
 			});
 
-	}, [childCategories, postOrder]); // Added postOrder dependency to re-run sanitization if a user changes it
+		// FIX: Removed 'postOrder' from dependencies. This hook should only run when chapters change.
+		// Changes to postOrder itself are handled by handleMovePost and should not trigger a re-fetch/re-sanitization
+		// unless 'childCategories' has changed.
+	}, [childCategories]);
+
 
 	// 4. Article Reordering Handler
 	const handleMovePost = ( chapterIdStr, postId, direction ) => {
@@ -202,7 +221,7 @@ export default function Edit( { className, attributes: attr, setAttributes } ) {
 		}
 	};
 
-	// NEW: 5. Chapter Reordering Handler
+	// 5. Chapter Reordering Handler
 	const handleMoveChapter = ( chapterId, direction ) => {
 		const currentIndex = chapterOrder.indexOf( chapterId );
 		let newIndex = currentIndex + ( direction === 'up' ? -1 : 1 );
@@ -291,10 +310,6 @@ export default function Edit( { className, attributes: attr, setAttributes } ) {
 
 			{/* Visual Editor Preview and Reordering Interface */}
 			<div className="toc-preview-container" style={ { textAlign: attr.alignment } }>
-				<h2 className="text-xl font-bold mb-4">
-					{ category ? getChapterName(category) : 'Table of Contents Preview (Select Root Category)' }
-				</h2>
-
 				{ isLoading && (
 					<div className="flex items-center space-x-2 p-3 bg-indigo-100 text-indigo-800 rounded">
 						<Spinner />
@@ -303,8 +318,9 @@ export default function Edit( { className, attributes: attr, setAttributes } ) {
 				)}
 
 				{ !isLoading && category && orderedChapters.length > 0 && (
-					<ol className="list-decimal list-inside space-y-4 pl-0 ml-4">
-						{/* NEW: Loop over the custom ordered list of chapter IDs */}
+					<div className="wp-block-pau-table-of-contents-block-list">
+					<ul>
+						{/* Loop over the custom ordered list of chapter IDs */}
 						{orderedChapters.map((chapter, chapterIndex) => {
 							const chapterIdStr = String(chapter.id);
 							// Use the custom post order from attributes, falling back to an empty array
@@ -312,11 +328,25 @@ export default function Edit( { className, attributes: attr, setAttributes } ) {
 							const isFirstChapter = chapterIndex === 0;
 							const isLastChapter = chapterIndex === orderedChapters.length - 1;
 
+							// NEW: Check if this chapter is currently open in the editor preview
+							const isChapterOpen = openChapters[chapterIdStr] || false;
+
 							return (
-								<li key={chapter.id} className="font-semibold text-gray-700 p-2 border border-blue-100 bg-blue-50 rounded">
+								<li key={chapter.id}>
 									<div className="flex items-center justify-between">
-										<span>{getChapterName(chapter.id)}</span>
-										{/* NEW: Chapter Reordering Controls */}
+										{/* Chapter Title and Toggle Button */}
+										<Button
+											className="chapter-toggle-button" // Add class for styling/targeting
+											onClick={() => handleToggleChapter(chapterIdStr)}
+											isTertiary
+											aria-expanded={isChapterOpen}
+											style={{ padding: 0, margin: 0 }}
+										>
+											<Dashicon icon={isChapterOpen ? "arrow-down" : "arrow-right"} style={{ marginRight: 8 }} />
+											<span>{getChapterName(chapter.id)}</span>
+										</Button>
+
+										{/* Chapter Reordering Controls */}
 										<div className="flex space-x-1">
 											<Button
 												icon={ <Dashicon icon="arrow-up-alt2" /> }
@@ -335,15 +365,16 @@ export default function Edit( { className, attributes: attr, setAttributes } ) {
 										</div>
 									</div>
 
-									{orderedPostIds.length > 0 && (
-										<ul className="list-none space-y-1 mt-2 border-l-2 border-gray-200 pl-4 pt-1">
+
+									{isChapterOpen && orderedPostIds.length > 0 && (
+										<ul>
 											{orderedPostIds.map((postId, index) => (
-												<li key={postId} className="flex items-center justify-between p-2 bg-white border border-gray-100 rounded text-sm font-normal shadow-sm">
-                                        <span className="text-gray-600 flex-grow pr-2">
-                                           <a href={getPostLink(chapterIdStr, postId)} onClick={(e) => e.preventDefault()}>
+												<li key={postId}>
+                                        	<span className="text-gray-600 flex-grow pr-2 text-sm">
+                                           		<a href={getPostLink(chapterIdStr, postId)} onClick={(e) => e.preventDefault()}>
                                                 {getPostTitle(chapterIdStr, postId)}
-                                           </a>
-                                        </span>
+                                           		</a>
+                                        	</span>
 													<div className="flex space-x-1">
 														<Button
 															icon={ <Dashicon icon="arrow-up-alt2" /> }
@@ -365,24 +396,20 @@ export default function Edit( { className, attributes: attr, setAttributes } ) {
 										</ul>
 									)}
 
-									{orderedPostIds.length === 0 && (
+									{isChapterOpen && orderedPostIds.length === 0 && (
 										<p className="text-xs text-gray-500 mt-1 pl-4">(No articles found in this chapter.)</p>
 									)}
 								</li>
 							);
 						})}
-					</ol>
+					</ul>
+					</div>
 				)}
 
 				{ !isLoading && category && orderedChapters.length === 0 && (
 					<p className="p-3 bg-yellow-100 text-yellow-800 rounded">No chapters (child categories) found for this root category.</p>
 				)}
 			</div>
-
-			{/* Hidden RichText placeholder to satisfy the block editor structure */}
-			<p className="sr-only">
-				{ 'TOC Block: Content generated dynamically by PHP using selected category and post order.' }
-			</p>
 		</div>
 	)
 }

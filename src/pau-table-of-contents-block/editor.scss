@@ -5,5 +5,13 @@
  */
 
 .wp-block-create-block-pau-table-of-contents-block {
-	border: 1px dotted #f00;
+	border: 1px dotted #fa0;
+}
+
+.editor-styles-wrapper .wp-block-pau-table-of-contents-block-list ul li {
+	list-style: none; /* or 'square', 'circle', etc. */
+}
+
+.editor-styles-wrapper .wp-block-pau-table-of-contents-block-list a {
+	font-size: 13px;
 }

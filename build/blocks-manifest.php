@@ -5,7 +5,7 @@ return array(
 		'$schema' => 'https://schemas.wp.org/trunk/block.json',
 		'apiVersion' => 3,
 		'name' => 'create-block/pau-table-of-contents-block',
-		'version' => '0.1.0',
+		'version' => '0.5.0',
 		'title' => 'Table of Contents',
 		'category' => 'design',
 		'icon' => 'list-view',

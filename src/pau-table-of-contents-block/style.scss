@@ -6,7 +6,25 @@
  */
 
 .wp-block-create-block-pau-table-of-contents-block {
-	background-color: #fff;
 	color: #000;
 	padding: 2px;
+}
+//to remove the disc in front of headings. I had to override the article_content
+.article__content .wp-block-create-block-pau-table-of-contents-block ol li {
+	list-style: none; /* or 'square', 'circle', etc. */
+}
+.toc-chapter {
+	font-size: 16px;
+}
+
+.toc-chapters-list {
+	list-style-type: none;
+	margin: 0;
+	padding: 0;
+}
+
+.toc-article-list{
+	margin:0;
+	padding:0;
+	font-size:12px;
 }

@@ -58,3 +58,5 @@ function create_block_pau_table_of_contents_block_block_init() {
 	wp_enqueue_script( 'jquery' );
 }
 add_action( 'init', 'create_block_pau_table_of_contents_block_block_init' );
+
+require __Dir__ . '/pau-book-nav-hooks.php';
