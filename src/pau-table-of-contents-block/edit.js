@@ -105,40 +105,47 @@ export default function Edit( { className, attributes: attr, setAttributes } ) {
 		if (category && category !== '') {
 			setIsLoading(true);
 			const parentId = parseInt(category, 10);
-			const path = `/wp/v2/categories?parent=${parentId}&per_page=100`;
 
-			apiFetch({ path })
-				.then((data) => {
-					setChildCategories(data);
+			// A. Fetch BOTH the saved state and the fresh category list
+			Promise.all([
+				apiFetch({ path: `/pau-toc/v1/get-toc?root_id=${parentId}` }),
+				apiFetch({ path: `/wp/v2/categories?parent=${parentId}&per_page=100` })
+			]).then(([savedData, freshCategories]) => {
+				setChildCategories(freshCategories);
 
-					// Initialize chapterOrder attribute
-					const fetchedChapterIds = data.map(chapter => chapter.id);
+				const freshIds = freshCategories.map(cat => cat.id);
+				let finalChapterOrder = [];
 
-					if (chapterOrder.length === 0 || chapterOrder.some(id => !fetchedChapterIds.includes(id))) {
-						// Initialize or sanitize chapterOrder if it's empty or contains invalid IDs
-						// NOTE: We only update chapterOrder here if a change is needed to avoid unnecessary attribute saves.
-						const existingOrder = chapterOrder.filter(id => fetchedChapterIds.includes(id));
-						const missingIds = fetchedChapterIds.filter(id => !existingOrder.includes(id));
-						const finalOrder = [...existingOrder, ...missingIds];
+				if (savedData.exists) {
+					// 1. Keep saved IDs only if they still exist in the database (filter out deleted)
+					const existingOrder = savedData.chapterOrder.filter(id => freshIds.includes(id));
 
-						if (JSON.stringify(chapterOrder) !== JSON.stringify(finalOrder)) {
-							setAttributes({
-								chapterOrder: finalOrder
-							});
-						}
-					}
-				})
-				.catch((error) => {
-					console.error(`Error fetching child categories for parent ${parentId}:`, error);
-					setChildCategories([]);
-					setIsLoading(false);
-				});
-		} else {
-			setChildCategories([]);
-			setPostsByChapter({});
-			setIsLoading(false);
+					// 2. Find new IDs from the API that aren't in our saved order yet
+					const newIds = freshIds.filter(id => !existingOrder.includes(id));
+
+					// 3. Combine: Existing (in their saved order) + New (appended at bottom)
+					finalChapterOrder = [...existingOrder, ...newIds];
+				} else {
+					// No saved data? Just use the fresh list
+					finalChapterOrder = freshIds;
+				}
+
+				// Update attributes only if the order actually changed to prevent loops
+				if (JSON.stringify(chapterOrder) !== JSON.stringify(finalChapterOrder)) {
+					setAttributes({
+						chapterOrder: finalChapterOrder,
+						// If this was a fresh load, we should also grab the postOrder
+						postOrder: savedData.exists ? savedData.postOrder : attr.postOrder
+					});
+				}
+
+				setIsLoading(false);
+			}).catch((err) => {
+				console.error(err);
+				setIsLoading(false);
+			});
 		}
-	}, [category]); // Depend on category attribute
+	}, [category]);
 
 
 	// 3. Fetch Posts for all Child Categories and initialize/sanitize Post Order

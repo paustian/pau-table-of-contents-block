@@ -12,12 +12,22 @@
  */
 
 defined( 'ABSPATH' ) || exit;
-
-// 1. Check for required attributes
 $root_category_id = isset( $attributes['category'] ) ? (int) $attributes['category'] : 0;
-$post_order       = isset( $attributes['postOrder'] ) ? (array) $attributes['postOrder'] : array();
-$chapter_order    = isset( $attributes['chapterOrder'] ) ? (array) $attributes['chapterOrder'] : array();
-$alignment        = isset( $attributes['alignment'] ) ? sanitize_key( $attributes['alignment'] ) : 'none';
+// 1. Check for required attributes
+$option_key = 'pau_book_order_' . $root_category_id;
+$global_toc = get_option( $option_key );
+
+if ( $global_toc ) {
+	// Use the global order if it exists
+	$chapter_order = (array) $global_toc['chapterOrder'];
+	$post_order    = (array) $global_toc['postOrder'];
+} else {
+	// Fallback to local block attributes
+	$post_order    = isset( $attributes['postOrder'] ) ? (array) $attributes['postOrder'] : array();
+	$chapter_order = isset( $attributes['chapterOrder'] ) ? (array) $attributes['chapterOrder'] : array();
+}
+
+$alignment = isset( $attributes['alignment'] ) ? sanitize_key( $attributes['alignment'] ) : 'none';
 
 // If no category is selected, or it's invalid, return early.
 if ( ! $root_category_id ) {

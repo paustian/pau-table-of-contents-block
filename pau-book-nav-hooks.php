@@ -14,6 +14,47 @@
  */
 
 defined( 'ABSPATH' ) || exit;
+
+/**
+ * Register a REST API endpoint to retrieve saved TOC structures.
+ * Path: /wp-json/pau-toc/v1/get-toc?root_id=123
+ */
+add_action( 'rest_api_init', function () {
+	register_rest_route( 'pau-toc/v1', '/get-toc', array(
+		'methods'             => 'GET',
+		'callback'            => 'pau_get_saved_toc_data',
+		'permission_callback' => function () {
+			return current_user_can( 'edit_posts' );
+		},
+	) );
+} );
+
+/**
+ * A callback for JavaScripts (Edit.js) to use to get any stored chapter data.
+ * @param $request
+ *
+ * @return array|false[]|WP_Error
+ */
+function pau_get_saved_toc_data( $request ) {
+	$root_id = $request->get_param( 'root_id' );
+	if ( ! $root_id ) {
+		return new WP_Error( 'no_id', 'Missing Root ID', array( 'status' => 400 ) );
+	}
+
+	$option_key = 'pau_book_order_' . $root_id;
+	$saved_data = get_option( $option_key );
+
+	if ( ! $saved_data ) {
+		return ['exists' => false];
+	}
+
+	return [
+		'exists'       => true,
+		'chapterOrder' => $saved_data['chapterOrder'],
+		'postOrder'    => $postOrder = (object) $saved_data['postOrder'], // Ensure it's an object for JS
+	];
+}
+
 /**
  * Set up an action and filter hooks
  * Action hook: Listen for post saves and check if a new TOC block has been
@@ -24,11 +65,27 @@ defined( 'ABSPATH' ) || exit;
 function pau_setup_book_nav_hooks() {
 	// Hook into the save process to update a global variable any time.
 	// There is a save event from a TOC Gutenberg block (which this plugin implements).
-	add_action( 'save_post', 'pau_cache_book_order_on_save' );
+	add_action( 'post_updated', 'pau_cache_book_order_on_save', 10, 3 );
 
 	// Hook into the content to create nav links between posts that are.
 	// part of the book.
 	add_filter( 'the_content', 'pau_inject_nav_links' );
+}
+
+/**
+ * Test to see if any blocks are table of content blocks. Then returen the ids of those blocks
+ * @param $blocks
+ *
+ * @return array
+ */
+function pau_extract_toc_data( $blocks ) {
+	$found_ids = [];
+	foreach ( $blocks as $block ) {
+		if ( 'create-block/pau-table-of-contents-block' === $block['blockName'] ) {
+			$found_ids[] = (int) $block['attrs']['category'];
+		}
+	}
+	return $found_ids;
 }
 
 /**
@@ -41,26 +98,64 @@ function pau_setup_book_nav_hooks() {
  *
  * @param int $post_id The ID of the post being saved.
  */
-function pau_cache_book_order_on_save( $post_id ) {
+function pau_cache_book_order_on_save( $post_id, $post_after, $post_before ) {
 	// Check if this is a valid post to check (autosaves, revisions, etc.).
 	// if not, we don't want to save it.
 	if ( wp_is_post_revision( $post_id ) || wp_is_post_autosave( $post_id ) ) {
 		return;
 	}
-	// Get the post content.
-	$post = get_post( $post_id );
-	if ( ! $post || ! has_blocks( $post->post_content ) ) {
-		return;
+	$old_content = $post_before->post_content;
+	$old_blocks  = parse_blocks( $old_content );
+
+	// 2. Get the NEW blocks
+	$new_content = $post_after->post_content;
+	$new_blocks  = parse_blocks( $new_content );
+
+	// Now you can compare them!
+	$old_tocs = pau_extract_toc_data( $old_blocks );
+	$new_tocs = pau_extract_toc_data( $new_blocks );
+
+	// extract the old and new TOCs and see if there is a difference
+	$old_ids = pau_extract_toc_data( $old_blocks );
+	$new_ids = pau_extract_toc_data( $new_blocks );
+	$deleted_tocs = array_diff_assoc( $old_ids, $new_ids );
+	$added_tocs = array_diff_assoc( $new_ids, $old_ids );
+
+	$current_tocs   = get_option( 'pau_book_tocs' );
+	//There are TOCs to delete, delete them
+	if ( sizeof( $deleted_tocs )>0){
+		foreach ( $deleted_tocs as $deleted_toc ) {
+			$toc_id = 'pau_book_order_' . $deleted_toc;
+			if ( $current_tocs[$toc_id] === 1){
+				//remove the item from the array
+				unset( $current_tocs[$toc_id] );
+			} else {
+				$current_tocs[$toc_id] = $current_tocs[$toc_id] - 1;
+			}
+		}
 	}
+
+	//There are TOCs to add, add them
+	if ( sizeof( $added_tocs )>0){
+		foreach ( $added_tocs as $deleted_toc ) {
+			$toc_id = 'pau_book_order_' . $deleted_toc;
+			if ( isset( $current_tocs[$toc_id] )){
+				$current_tocs[$toc_id] = $current_tocs[$toc_id] + 1;
+			} else {
+				$current_tocs[$toc_id] = 1;
+			}
+		}
+	}
+
 	// now walk through the blocks and look for a pau-table-of-contents-block.
 	// if one is found cache the structure to use in the content block.
-	$blocks = parse_blocks( $post->post_content );
+	$new_tocs = [];
+	$blocks   = parse_blocks( $post_after->post_content );
 	foreach ( $blocks as $block ) {
 		// look for the pau-table-of-contents-block.
 		if ( 'create-block/pau-table-of-contents-block' === $block['blockName'] ) {
 			// Found the block. Get its attributes.
 			$attrs = $block['attrs'];
-
 			// Ensure all required attributes are set.
 			if ( ! empty( $attrs['category'] ) && ! empty( $attrs['chapterOrder'] ) && ! empty( $attrs['postOrder'] ) ) {
 
@@ -73,15 +168,20 @@ function pau_cache_book_order_on_save( $post_id ) {
 					'postOrder'    => (array) $attrs['postOrder'],
 				);
 
-				// Create a unique transient key based on the root category ID.
-				// This allows for multiple "books" on one site.
-				$transient_key = 'pau_book_order_' . $root_category_id;
+				// Create a unique option key based on the root category ID.
+				// This allows for multiple "books" on one site. However it only allows for one TOC per root category.
+				//If you create two TOCs from the same book they will share the root category
+				$option_key = 'pau_book_order_' . $root_category_id;
 
-				// Save the data to the transient.
-				// Set to 0 for no expiration (it will only update on save).
-				set_transient( $transient_key, $structure_to_cache, 0 );
+				$new_tocs[ $option_key ] = $structure_to_cache;
 			}
 		}
+	}
+	update_option( 'pau_book_tocs', $current_tocs );
+	//now we can add our new TOCs. We only want to add each sturcture once.
+	$unique_tocs = array_unique( $new_tocs );
+	foreach ( $unique_tocs as $new_toc_id => $new_toc_structure ) {
+		update_option( $new_toc_id, $new_toc_structure );
 	}
 }
 
@@ -99,33 +199,31 @@ function pau_inject_nav_links( $content ) {
 		return $content;
 	}
 	// needed globals for the method.
-	global $wpdb, $post;
+	global $post;
 	$current_post_id = $post->ID;
 
-	// grab all cached transients.
-	$transient_keys = $wpdb->get_col( "SELECT option_name FROM $wpdb->options WHERE option_name LIKE '_transient_pau_book_order_%'" );
+	// grab all our know TOCs.
+	$tocs = get_option( 'pau_book_tocs' );
 
-	// if there are no transient keys, not TOC has been established and we can.
+	// if there are no TOCs, no TOC has been established and we can.
 	// just return the content.
-	if ( empty( $transient_keys ) ) {
+	if ( empty( $tocs ) ) {
 		return $content;
 	}
 
 	// we have keys and a single post. Now walk through the post and see if it's part of any TOC.
 	$book_structure = null;
 	$current_chap   = null;
+	foreach ( $tocs as $key => $value ){
 
-	// Iterate through all cached books to see if this post belongs to one.
-	foreach ( $transient_keys as $key ) {
-		$transient_key  = str_replace( '_transient_', '', $key );
-		$structure      = get_transient( $transient_key );
-		$post_order_map = (array) $structure['postOrder'];
+		$toc_structure = get_option($key);
+		$post_order_map = (array) $toc_structure['postOrder'];
 
 		// Check all chapters in this book.
 		foreach ( $post_order_map as $chapter_id => $post_ids ) {
 			if ( in_array( $current_post_id, (array) $post_ids, true ) ) {
 				// Found it! This post is part of this book.
-				$book_structure = $structure;
+				$book_structure = $toc_structure;
 				$current_chap   = $chapter_id;
 				break 2; // Break out of both loops.
 			}
