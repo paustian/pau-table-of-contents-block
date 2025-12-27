@@ -18,11 +18,11 @@ $option_key = 'pau_book_order_' . $root_category_id;
 $global_toc = get_option( $option_key );
 
 if ( $global_toc ) {
-	// Use the global order if it exists
+	// Use the global order if it exists.
 	$chapter_order = (array) $global_toc['chapterOrder'];
 	$post_order    = (array) $global_toc['postOrder'];
 } else {
-	// Fallback to local block attributes
+	// Fallback to local block attributes.
 	$post_order    = isset( $attributes['postOrder'] ) ? (array) $attributes['postOrder'] : array();
 	$chapter_order = isset( $attributes['chapterOrder'] ) ? (array) $attributes['chapterOrder'] : array();
 }
