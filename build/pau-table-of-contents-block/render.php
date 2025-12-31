@@ -6,12 +6,14 @@
  * and posts based on the saved attributes and applies the custom order for both
  * chapters and articles.
  *
- * @package pau-table-of-contents-block
+ * @package PaustianCreateTableOfContentsBlock
  * @param array $attributes The block attributes.
  * @return string The rendered HTML.
  */
 
-if ( ! defined( 'ABSPATH' ) ) exit; // Exit if accessed directly.
+if ( ! defined( 'ABSPATH' ) ) {
+	exit; // Exit if accessed directly.
+}
 
 $root_category_id = isset( $attributes['category'] ) ? (int) $attributes['category'] : 0;
 // 1. Check for required attributes
@@ -19,11 +21,11 @@ $option_key = 'pau_book_order_' . $root_category_id;
 $global_toc = get_option( $option_key );
 
 if ( $global_toc ) {
-	// Use the global order if it exists
+	// Use the global order if it exists.
 	$chapter_order = (array) $global_toc['chapterOrder'];
 	$post_order    = (array) $global_toc['postOrder'];
 } else {
-	// Fallback to local block attributes
+	// Fallback to local block attributes.
 	$post_order    = isset( $attributes['postOrder'] ) ? (array) $attributes['postOrder'] : array();
 	$chapter_order = isset( $attributes['chapterOrder'] ) ? (array) $attributes['chapterOrder'] : array();
 }

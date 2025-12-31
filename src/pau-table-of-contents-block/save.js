@@ -9,7 +9,7 @@
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain:       pau-table-of-contents-block
  *
- * @package PaustianCreateTableOfContentsBlock
+ * @package
  */
 /**
  * React hook that is used to mark the block wrapper element.
@@ -29,9 +29,5 @@ import { useBlockProps } from '@wordpress/block-editor';
  * @return {Element} Element to render.
  */
 export default function save() {
-	return (
-		<p { ...useBlockProps.save() }>
-			{ '' }
-		</p>
-	);
+	return <p {...useBlockProps.save()}>{''}</p>;
 }

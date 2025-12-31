@@ -1,24 +1,26 @@
 <?php
 /**
- * Plugin Name:       Pau Table of Contents
- * Description:       A Gutenberg block that can organize posts or pages into a table of contents, as for a book.
- * Version:           0.1.0
- * Requires at least: 6.7
- * Requires PHP:      7.4
- * Author:            The WordPress Contributors
- * License:           GPL-2.0-or-later
- * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
- * Text Domain:       pau-table-of-contents-block
+ * This file monitors for the creation of Table of Contents Blocks in posts. If a new TOC block is created,
+ * The code finds and saves the structures of chapters and articles. This TOC structure is saved. Any time a
+ * post is rendered a filter function checks to see if the post is part of a TOC. If it is, previous and next
+ * nav lengths are added to it.
  *
  * @package PaustianCreateTableOfContentsBlock
  */
 
-if ( ! defined( 'ABSPATH' ) ) exit; // Exit if accessed directly.
+if ( ! defined( 'ABSPATH' ) ) {
+	exit; // Exit if accessed directly.
+}
 
 /**
+ * Register Rest API.
+ *
  * Register a REST API endpoint to retrieve saved TOC structures.
- * Path: /wp-json/pau-toc/v1/get-toc?root_id=123
+ * Path: /wp-json/pau-toc/v1/get-toc?root_id=123.
+ *
+ * @return void
  */
+
 add_action(
 	'rest_api_init',
 	function () {
@@ -64,24 +66,10 @@ function pau_get_saved_toc_data( $request ) {
 }
 
 /**
- * Set up an action and filter hooks
- * Action hook: Listen for post saves and check if a new TOC block has been
- * created.
- * Filter hook: Filter any content and see if the pages are part of a TOC block that we saved above
- * If they are, then add navication links.
- */
-function pau_setup_book_nav_hooks() {
-	// Hook into the save process to update a global variable any time.
-	// There is a save event from a TOC Gutenberg block (which this plugin implements).
-	add_action( 'post_updated', 'pau_cache_book_order_on_save', 10, 3 );
-
-	// Hook into the content to create nav links between posts that are.
-	// part of the book.
-	add_filter( 'the_content', 'pau_inject_nav_links' );
-}
-
-/**
- * Test to see if any blocks are table of content blocks. Then returen the ids of those blocks
+ * Extract TOC data
+ *
+ * Scan an array of blocks and if any of them are TOC blocks remeber them. Finally,
+ * return the found array of TOC blocks to the caller
  *
  * @param array $blocks The blocks in the post.
  *
@@ -197,9 +185,10 @@ function pau_cache_book_order_on_save( $post_id, $post_after, $post_before ) {
 }
 
 /**
- *  Now walk through the post and see if it is part of a TOC
+ *  Inject nav links into posts
  *
- * Injects Previous/Next navigation links into the post content.
+ * Injects Previous/Next navigation links into the post content of any post that is part of a TOC. This makes
+ * it easy for the user to navigate a book.
  *
  * @param string $content The original post content.
  * @return string The modified post content with nav links.
@@ -227,7 +216,10 @@ function pau_inject_nav_links( $content ) {
 	$current_chap   = null;
 	foreach ( $tocs as $key => $value ) {
 
-		$toc_structure  = get_option( $key );
+		$toc_structure = get_option( $key );
+		if ( ! $toc_structure ) {
+			continue;
+		}
 		$post_order_map = (array) $toc_structure['postOrder'];
 
 		// Check all chapters in this book.
@@ -318,5 +310,21 @@ function pau_inject_nav_links( $content ) {
 	return $content;
 }
 
+/**
+ * Set up an action and filter hooks
+ * Action hook: Listen for post saves and check if a new TOC block has been
+ * created.
+ * Filter hook: Filter any content and see if the pages are part of a TOC block that we saved above
+ * If they are, then add navication links.
+ */
+function pau_setup_book_nav_hooks() {
+	// Hook into the save process to update a global variable any time.
+	// There is a save event from a TOC Gutenberg block (which this plugin implements).
+	add_action( 'post_updated', 'pau_cache_book_order_on_save', 10, 3 );
+
+	// Hook into the content to create nav links between posts that are.
+	// part of the book.
+	add_filter( 'the_content', 'pau_inject_nav_links' );
+}
 
 pau_setup_book_nav_hooks();

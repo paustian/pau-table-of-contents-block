@@ -4,15 +4,81 @@
  * Replace them with your own styles or remove the file completely.
  */
 
+/* Container styling */
 .wp-block-create-block-pau-table-of-contents-block {
-	border: 1px dotted #fa0;
+  border: 1px solid #ddd;
+  background: #f9f9f9;
+  padding: 15px;
+  border-radius: 8px;
 }
 
-.editor-styles-wrapper .wp-block-pau-table-of-contents-block-list ul li {
-	list-style: none;
+/* Remove default list styling in the editor */
+.wp-block-pau-table-of-contents-block-list ul {
+  list-style: none;
+  padding-left: 0 !important;
+  margin: 0;
 }
 
-//adjust the size a bit bigger since this is an editing interface.
-.editor-visual-editor .components-button {
-	font-size: 16px;
+.wp-block-pau-table-of-contents-block-list ul li {
+  list-style: none !important;
+  margin-bottom: 8px;
+}
+
+/* Nested list (Articles) indentation */
+.wp-block-pau-table-of-contents-block-list ul ul {
+  list-style: none;
+  padding-left: 24px;
+  margin-top: 5px;
+}
+
+/* Layout Helpers (Explicitly defining the 'flex' classes used in your JS) */
+.wp-block-pau-table-of-contents-block-list .flex {
+  display: flex;
+  align-items: center;
+}
+
+.wp-block-pau-table-of-contents-block-list .justify-between {
+  justify-content: space-between;
+}
+
+.wp-block-pau-table-of-contents-block-list .space-x-1 > * + * {
+  margin-left: 4px;
+}
+
+/* Button & Icon Styling */
+.wp-block-pau-table-of-contents-block-list .components-button {
+  font-size: 16px;
+  height: auto;
+  min-height: 32px;
+}
+
+/* Ensure the new SVG icons are sized and colored correctly */
+.wp-block-pau-table-of-contents-block-list svg {
+  fill: currentColor;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* Specifically style the chapter toggle to look like a clickable header */
+.chapter-toggle-button {
+  font-weight: 600;
+  color: #1e1e1e;
+  text-decoration: none;
+}
+
+.chapter-toggle-button:hover {
+  color: #007cba;
+}
+
+/* Ensure article links don't trigger actual navigation in editor */
+.wp-block-pau-table-of-contents-block-list a {
+  color: #555;
+  text-decoration: none;
+  pointer-events: none; /* Prevents accidental clicks in editor */
+}
+
+.wp-block-pau-table-of-contents-block-list .chapter-toggle-button {
+  flex-grow: 1;
+  justify-content: flex-start;
+  text-align: left;
 }

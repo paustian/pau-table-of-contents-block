@@ -1,11 +1,11 @@
 <?php
 /**
- * Plugin Name:       Pau Table of Contents
+ * Plugin Name:       Pau Table of Contents Block
  * Description:       A Gutenberg block that can organize posts or pages into a table of contents, as for a book.
- * Version:           0.1.0
+ * Version:           0.2.0
  * Requires at least: 6.7
  * Requires PHP:      7.4
- * Author:            The WordPress Contributors
+ * Author:            Timothy Paustian
  * License:           GPL-2.0-or-later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain:       pau-table-of-contents-block
@@ -13,7 +13,9 @@
  * @package PaustianCreateTableOfContentsBlock
  */
 
-if ( ! defined( 'ABSPATH' ) ) exit; // Exit if accessed directly.
+if ( ! defined( 'ABSPATH' ) ) {
+	exit; // Exit if accessed directly.
+}
 
 /**
  * Registers the block using a `blocks-manifest.php` file, which improves the performance of block type registration.
@@ -58,4 +60,4 @@ function create_block_pau_table_of_contents_block_block_init() {
 }
 add_action( 'init', 'create_block_pau_table_of_contents_block_block_init' );
 
-require __DIR__ . '/pau-book-nav-hooks.php';
+require __DIR__ . '/includes/pau-book-nav-hooks.php';
