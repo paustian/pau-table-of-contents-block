@@ -2,7 +2,6 @@
 Author: Timothy Paustian
 Author URI: https://textbookconsortia.com/about-the-author/
 Contributors: tdpaustian
-Donate link:
 Tags:  post, page, gutenberg
 Requires at least: 6.7
 Tested up to: 6.9
@@ -19,7 +18,7 @@ the table of contents is made, you can sort the chapters and posts, and the plug
 creates links to the next and previous posts.
 ## Installation
 1. In your WordPress Dashboard, navigate to "Plugins" and then click on the "Add Plugins" button.
-2. Search for "Create Table of Contents Block".
+2. Search for "Table of Contents Block".
 3. Install the plugin by pressing the "Install" Button.
 4. Activate the plugin by pressing the "Activate" button.
 
@@ -28,8 +27,14 @@ subcategories for each section of the book. As you write posts, assign them to t
 add a post to more than one subcategory. Make sure the Table of Contents plugin is installed and activated. You can now
 use the plugin as you would any other block. Create a Post or Page. Add a block and search for table of contents block. In the
 block, on the sidebar, choose the root category in the dropdown menu that you created for your book. The plugin will walk
-through all the posts that are in the Category and subcategories and create a table of contents from them. Chapters and
-articles can be moved around in the TOC. Previous and next links are automatically created when a post is displayed.
+through all the posts that are in the Category and subcategories and create a table of contents from them. After creation,
+chapters and articles can be moved around in the TOC. Previous and next links are automatically created when a post is displayed.
+
+== Source Code ==
+The Pau Table of Contents Block is a Gutenberg block created as recommended in the Block Editor Handbook
+(https://developer.wordpress.org/block-editor/). As recommended by the handbook, the source code is minified by the
+build process for production. In keeping with the spirit of open source, the unminified code
+for Pau Table of Contents is available at GitHub (https://github.com/paustian/pau-table-of-contents-block/).
 
 If you want to see an example of this used on a live site, check out my textbook Through the Microscope (https://textbookconsortia.com/through-the-microscope-table-of-contents/)
 ## Minimum Requirements
